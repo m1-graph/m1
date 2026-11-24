@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light" />
+<link rel="icon" href="data:," />
+<title>M-1グランプリ 戦績グラフ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  :root{ --bg:#fff; --surface:#fff; --ink:#17150f; --muted:#6b6659; --line:#e4e1d8; --red:#d90429; --gold:#a97e0f; --gold-bg:#fef9e2; --final-bg:#fdeeaf; --chart-grid:#e9e6dc; }
+  html{ -webkit-text-size-adjust:100%; }
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:"Noto Sans JP",system-ui,-apple-system,"Hiragino Kaku Gothic ProN",sans-serif; line-height:1.6; font-size:15px; }
+  .wrap{ max-width:1080px; margin:0 auto; padding:18px 16px 40px; }
+  a{ color:var(--red); }
+  button{ min-height:2.25rem; }
+  h1{ font-size:20px; font-weight:900; margin:0 0 14px; } h1 .accent{ color:var(--red); }
+  .group-label{ font-size:13px; font-weight:900; margin:14px 0 7px; display:flex; align-items:center; gap:8px; }
+  .group-label::before{ content:""; width:7px; height:16px; background:var(--red); border-radius:2px; flex:none; }
+  .group-label .win{ font-size:12px; font-weight:700; color:var(--gold); }
+  .group-label:first-of-type{ margin-top:0; }
+  .chips{ display:flex; flex-wrap:wrap; gap:7px; }
+  .chip{ display:inline-flex; align-items:center; gap:7px; padding:5px 11px 5px 9px; min-height:38px; border:1.5px solid var(--line); border-radius:999px; background:#fff; color:var(--ink); font:inherit; font-size:13.5px; font-weight:700; cursor:pointer; }
+  .chip .dot{ width:11px; height:11px; border-radius:50%; background:var(--c); flex:none; }
+  .chip[aria-pressed="true"]{ border-color:var(--c); background:color-mix(in srgb, var(--c) 10%, #fff); }
+  .chip[aria-pressed="false"]{ opacity:.5; }
+  .chart-box{ position:sticky; top:8px; z-index:30; max-width:840px; margin:0 auto 6px; padding:12px 10px 8px; background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:0 6px 20px rgba(23,21,15,.08); }
+  .rangebar{ display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin:0 0 10px; }
+  .rangebar .rl{ font-size:12.5px; font-weight:900; color:var(--muted); }
+  .rbtn{ padding:5px 13px; min-height:36px; border:1.5px solid var(--line); border-radius:999px; background:#fff; color:var(--ink); font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+  .rbtn[aria-pressed="true"]{ border-color:var(--red); background:#fdf0f2; color:var(--red); }
+  .range-sep{ width:1px; height:24px; background:var(--line); margin:0 4px; flex:none; }
+  svg text{ font-family:"Noto Sans JP",sans-serif; }
+  footer{ margin-top:34px; border-top:1px solid var(--line); padding-top:10px; color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><span class="accent">M-1グランプリ</span> 戦績グラフ</h1>
+  <section aria-label="決勝コンビの戦績グラフ">
+    <div class="chart-box">
+      <div class="rangebar">
+        <span class="rl">表示期間</span>
+        <span role="group" aria-label="表示する期間の切り替え" style="display:contents">
+          <button type="button" class="rbtn" id="btnAll" aria-pressed="false">2001〜</button>
+          <button type="button" class="rbtn" id="btnModern" aria-pressed="true">2015〜</button>
+        </span>
+        <span class="range-sep" aria-hidden="true"></span>
+        <button type="button" class="rbtn" id="btnReset">選択をリセット</button>
+      </div>
+      <div id="chart" role="img" aria-label="決勝コンビの年ごとの到達ラウンドを示す折れ線グラフ"></div>
+    </div>
+    <div id="groups"></div>
+  </section>
+  <footer>
+    到達ラウンドは公式サイト「コンビ情報」の各コンビページ（出場情報・結果）をもとに作成。2001〜2010年分は公式記録とWikipediaの各コンビの成績表で照合しました。不参加・出場資格終了の年は点を表示していません。
+    <a href="https://www.m-1gp.com/combi/" target="_blank" rel="noopener">M-1グランプリ 公式サイト｜コンビ情報</a> ／
+    <a href="https://www.m-1gp.com/history/" target="_blank" rel="noopener">大会の歴史</a>
+  </footer>
+</div>
+<script>
+"use strict";
+/* level: 1=1回戦 2=2回戦 3=3回戦 4=準々決勝 5=準決勝 6=決勝 7=最終決戦 8=優勝 */
+const LEVELS = ["","1回戦","2回戦","3回戦","準々決勝","準決勝","決勝","最終決戦","優勝"];
+const COMBI = [
+ { id:"takuro", name:"たくろう", color:"#b8860b",
+   history:{2016:3,2017:4,2018:5,2019:4,2020:4,2021:3,2022:4,2023:3,2024:4,2025:8},
+   finals:[{year:2025,total:861,judges:9,rank:1,votes:8}] },
+ { id:"donde", name:"ドンデコルテ", color:"#1f6feb",
+   history:{2019:4,2020:4,2021:4,2022:3,2023:3,2024:5,2025:7},
+   finals:[{year:2025,total:845,judges:9,rank:2,votes:1}] },
+ { id:"evers", name:"エバース", color:"#d90429",
+   history:{2015:1,2016:1,2017:2,2018:1,2019:3,2020:1,2021:3,2022:4,2023:5,2024:6,2025:7},
+   finals:[{year:2024,total:848,judges:9,rank:4,votes:null},{year:2025,total:870,judges:9,rank:3,votes:0}] },
+ { id:"shinku", name:"真空ジェシカ", color:"#0e7c6b",
+   history:{2015:2,2016:2,2017:4,2018:3,2019:4,2020:4,2021:6,2022:6,2023:6,2024:7,2025:6},
+   finals:[{year:2021,total:638,judges:7,rank:6,votes:null},{year:2022,total:647,judges:7,rank:5,votes:null},{year:2023,total:643,judges:7,rank:5,votes:null},{year:2024,total:849,judges:9,rank:3,votes:1},{year:2025,total:844,judges:9,rank:4,votes:null}] },
+ { id:"yarens", name:"ヤーレンズ", color:"#e07b1f",
+   history:{2015:4,2016:3,2017:4,2018:4,2019:4,2020:4,2021:4,2022:5,2023:7,2024:6,2025:6},
+   finals:[{year:2023,total:656,judges:7,rank:2,votes:3},{year:2024,total:825,judges:9,rank:5,votes:null},{year:2025,total:843,judges:9,rank:5,votes:null}] },
+ { id:"gokai", name:"豪快キャプテン", color:"#2e7d32",
+   history:{2019:3,2020:2,2021:3,2022:4,2023:5,2024:5,2025:6},
+   finals:[{year:2025,total:839,judges:9,rank:6,votes:null}] },
+ { id:"kaname", name:"カナメストーン", color:"#795548",
+   history:{2015:2,2016:1,2017:3,2018:2,2019:2,2020:4,2021:3,2022:4,2023:4,2024:4,2025:6},
+   finals:[{year:2025,total:830,judges:9,rank:7,votes:null}] },
+ { id:"yoneda", name:"ヨネダ2000", color:"#c2255c",
+   history:{2020:1,2021:5,2022:6,2023:4,2024:4,2025:6},
+   finals:[{year:2022,total:647,judges:7,rank:5,votes:null},{year:2025,total:826,judges:9,rank:8,votes:null}] },
+ { id:"mama", name:"ママタルト", color:"#00838f",
+   history:{2016:2,2017:2,2018:2,2019:3,2020:4,2021:4,2022:5,2023:5,2024:6,2025:6},
+   finals:[{year:2024,total:812,judges:9,rank:10,votes:null},{year:2025,total:823,judges:9,rank:9,votes:null}] },
+ { id:"mezon", name:"めぞん", color:"#546e7a",
+   history:{2016:1,2017:1,2018:2,2019:2,2020:2,2021:2,2022:2,2023:3,2024:2,2025:6},
+   finals:[{year:2025,total:820,judges:9,rank:10,votes:null}] },
+ { id:"reiwa", name:"令和ロマン", color:"#212121",
+   history:{2017:2,2018:5,2019:4,2020:4,2021:4,2022:5,2023:8,2024:8},
+   finals:[{year:2023,total:648,judges:7,rank:1,votes:4},{year:2024,total:850,judges:9,rank:1,votes:5}] },
+ { id:"batteryz", name:"バッテリィズ", color:"#7b1fa2",
+   history:{2018:3,2019:2,2020:2,2021:3,2022:4,2023:5,2024:7},
+   finals:[{year:2024,total:861,judges:9,rank:2,votes:3}] },
+ { id:"tombrown", name:"トム・ブラウン", color:"#827717",
+   history:{2015:3,2016:2,2017:4,2018:6,2019:5,2020:4,2021:4,2022:4,2023:5,2024:6},
+   finals:[{year:2018,total:633,judges:7,rank:6,votes:null},{year:2024,total:823,judges:9,rank:6,votes:null}] },
+ { id:"daitaku", name:"ダイタク", color:"#5e35b1",
+   history:{2015:5,2016:4,2017:4,2018:4,2019:5,2020:5,2021:5,2022:4,2023:5,2024:6},
+   finals:[{year:2024,total:820,judges:9,rank:7,votes:null}] },
+ { id:"mayurika", name:"マユリカ", color:"#cf4d8a",
+   history:{2015:4,2016:4,2017:4,2018:5,2019:4,2020:4,2021:5,2022:5,2023:6,2024:6},
+   finals:[{year:2023,total:645,judges:7,rank:4,votes:null},{year:2024,total:820,judges:9,rank:7,votes:null}] },
+ { id:"jockrock", name:"ジョックロック", color:"#9aa30f",
+   history:{2022:2,2023:4,2024:6,2025:4},
+   finals:[{year:2024,total:819,judges:9,rank:9,votes:null}] },
+{ id:"sayaka", name:"さや香", color:"#953f23",
+   history:{2015:3,2016:3,2017:6,2018:4,2019:4,2020:4,2021:5,2022:7,2023:7},
+   finals:[{year:2017,total:628,judges:7,rank:7,votes:null},{year:2022,total:667,judges:7,rank:2,votes:1},{year:2023,total:659,judges:7,rank:3,votes:0}] },
+ { id:"kabeposter", name:"カベポスター", color:"#1faa6b",
+   history:{2015:3,2016:2,2017:3,2018:3,2019:3,2020:5,2021:5,2022:6,2023:6,2024:5,2025:5},
+   finals:[{year:2022,total:634,judges:7,rank:8,votes:null},{year:2023,total:635,judges:7,rank:6,votes:null}] },
+ { id:"mogu", name:"モグライダー", color:"#a51ac1",
+   history:{2015:2,2016:3,2017:4,2018:4,2019:4,2020:4,2021:6,2022:4,2023:6,2024:3},
+   finals:[{year:2021,total:637,judges:7,rank:8,votes:null},{year:2023,total:632,judges:7,rank:7,votes:null}] },
+ { id:"danbira", name:"ダンビラムーチョ", color:"#aec02d",
+   history:{2015:4,2016:3,2017:3,2018:5,2019:4,2020:2,2021:4,2022:5,2023:6,2024:5,2025:4},
+   finals:[{year:2023,total:631,judges:7,rank:8,votes:null}] },
+ { id:"shishigashira", name:"シシガシラ", color:"#1c669b",
+   history:{2018:4,2019:4,2020:4,2021:4,2022:4,2023:6,2024:5,2025:4},
+   finals:[{year:2023,total:627,judges:7,rank:9,votes:null}] },
+ { id:"kurage", name:"くらげ", color:"#b11845",
+   history:{2018:1,2019:5,2020:4,2021:4,2022:4,2023:6,2024:4,2025:4},
+   finals:[{year:2023,total:620,judges:7,rank:10,votes:null}] },
+ { id:"westland", name:"ウエストランド", color:"#2ab22a",
+   history:{2015:3,2016:4,2017:4,2018:5,2019:4,2020:6,2021:4,2022:8},
+   finals:[{year:2020,total:622,judges:7,rank:9,votes:null},{year:2022,total:659,judges:7,rank:1,votes:6}] },
+ { id:"longcoat", name:"ロングコートダディ", color:"#5525c8",
+   history:{2015:3,2016:4,2017:4,2018:4,2019:5,2020:5,2021:6,2022:7,2023:5,2024:5},
+   finals:[{year:2021,total:649,judges:7,rank:4,votes:null},{year:2022,total:660,judges:7,rank:3,votes:0}] },
+ { id:"dansei", name:"男性ブランコ", color:"#a26816",
+   history:{2015:3,2016:4,2017:3,2018:4,2019:3,2021:5,2022:6,2023:4,2024:5,2025:2},
+   finals:[{year:2022,total:650,judges:7,rank:4,votes:null}] },
+ { id:"oswald", name:"オズワルド", color:"#26a394",
+   history:{2015:3,2016:1,2017:3,2018:3,2019:6,2020:6,2021:7,2022:6,2023:5,2024:5,2025:4},
+   finals:[{year:2019,total:638,judges:7,rank:7,votes:null},{year:2020,total:642,judges:7,rank:5,votes:null},{year:2021,total:665,judges:7,rank:2,votes:1},{year:2022,total:639,judges:7,rank:7,votes:null}] },
+ { id:"kyu", name:"キュウ", color:"#b922a0",
+   history:{2015:3,2016:3,2017:3,2018:4,2019:3,2020:5,2021:5,2022:6,2023:4,2024:4,2025:4},
+   finals:[{year:2022,total:620,judges:7,rank:9,votes:null}] },
+ { id:"diamond", name:"ダイヤモンド", color:"#7ed11c",
+   history:{2017:2,2018:4,2019:4,2020:4,2021:4,2022:6,2023:4,2024:3},
+   finals:[{year:2022,total:616,judges:7,rank:10,votes:null}] },
+ { id:"nishikigoi", name:"錦鯉", color:"#233f95",
+   history:{2015:4,2016:5,2017:4,2018:4,2019:5,2020:6,2021:8},
+   finals:[{year:2020,total:643,judges:7,rank:4,votes:null},{year:2021,total:655,judges:7,rank:1,votes:5}] },
+ { id:"indians", name:"インディアンス", color:"#aa251f",
+   history:{2015:3,2016:5,2017:4,2018:5,2019:6,2020:6,2021:7,2022:4,2023:4,2024:5,2025:4},
+   finals:[{year:2019,total:632,judges:7,rank:9,votes:null},{year:2020,total:625,judges:7,rank:7,votes:null},{year:2021,total:655,judges:7,rank:3,votes:1}] },
+ { id:"momo", name:"もも", color:"#1ac152",
+   history:{2017:1,2018:4,2019:4,2020:4,2021:6,2022:3,2023:3,2024:3,2025:4},
+   finals:[{year:2021,total:645,judges:7,rank:5,votes:null}] },
+ { id:"haraichi", name:"ハライチ", color:"#892dc0",
+   history:{2015:6,2016:6,2017:5,2021:6},
+   finals:[{year:2015,total:788,judges:9,rank:9,votes:null},{year:2016,total:446,judges:5,rank:6,votes:null},{year:2021,total:636,judges:7,rank:9,votes:null}] },
+ { id:"ranjatai", name:"ランジャタイ", color:"#9b911c",
+   history:{2015:2,2016:4,2017:5,2018:4,2019:4,2020:5,2021:6,2022:4},
+   finals:[{year:2021,total:628,judges:7,rank:10,votes:null}] },
+ { id:"magical", name:"マヂカルラブリー", color:"#1891b1",
+   history:{2015:4,2016:5,2017:6,2018:5,2019:5,2020:8},
+   finals:[{year:2017,total:607,judges:7,rank:10,votes:null},{year:2020,total:649,judges:7,rank:1,votes:3}] },
+ { id:"oideyasukoga", name:"おいでやすこが", color:"#b22a6d",
+   history:{2019:3,2020:7},
+   finals:[{year:2020,total:658,judges:7,rank:2,votes:2}] },
+ { id:"mitorizu", name:"見取り図", color:"#46c825",
+   history:{2015:4,2016:4,2017:5,2018:6,2019:6,2020:7,2021:5,2022:4},
+   finals:[{year:2018,total:606,judges:7,rank:9,votes:null},{year:2019,total:649,judges:7,rank:5,votes:null},{year:2020,total:648,judges:7,rank:3,votes:2}] },
+ { id:"newyork", name:"ニューヨーク", color:"#2216a2",
+   history:{2015:4,2016:5,2017:5,2018:4,2019:6,2020:6,2021:5},
+   finals:[{year:2019,total:616,judges:7,rank:10,votes:null},{year:2020,total:642,judges:7,rank:5,votes:null}] },
+ { id:"akina", name:"アキナ", color:"#a35526",
+   history:{2015:4,2016:6,2017:5,2018:5,2020:6,2021:4,2022:3,2023:4},
+   finals:[{year:2016,total:446,judges:5,rank:5,votes:null},{year:2020,total:622,judges:7,rank:8,votes:null}] },
+ { id:"hoteison", name:"東京ホテイソン", color:"#22b987",
+   history:{2015:2,2016:2,2017:5,2018:5,2019:5,2020:6,2021:5,2022:4,2023:4,2024:4,2025:4},
+   finals:[{year:2020,total:617,judges:7,rank:10,votes:null}] },
+ { id:"milkboy", name:"ミルクボーイ", color:"#ca1cd1",
+   history:{2015:3,2016:4,2017:4,2018:4,2019:8},
+   finals:[{year:2019,total:681,judges:7,rank:1,votes:6}] },
+ { id:"kamaitachi", name:"かまいたち", color:"#789523",
+   history:{2015:5,2016:5,2017:6,2018:6,2019:7},
+   finals:[{year:2017,total:640,judges:7,rank:4,votes:null},{year:2018,total:636,judges:7,rank:5,votes:null},{year:2019,total:660,judges:7,rank:2,votes:1}] },
+ { id:"pekopa", name:"ぺこぱ", color:"#1f5eaa",
+   history:{2015:2,2016:3,2017:2,2018:4,2019:7,2020:5},
+   finals:[{year:2019,total:654,judges:7,rank:3,votes:0}] },
+ { id:"wagyu", name:"和牛", color:"#c11a36",
+   history:{2015:6,2016:7,2017:7,2018:7,2019:6},
+   finals:[{year:2015,total:806,judges:9,rank:6,votes:null},{year:2016,total:469,judges:5,rank:2,votes:1},{year:2017,total:653,judges:7,rank:2,votes:3},{year:2018,total:656,judges:7,rank:2,votes:3},{year:2019,total:652,judges:7,rank:4,votes:null}] },
+ { id:"karashi", name:"からし蓮根", color:"#2dc040",
+   history:{2015:4,2016:4,2017:5,2018:5,2019:6,2020:5,2021:5,2022:5,2023:4,2024:4,2025:4},
+   finals:[{year:2019,total:639,judges:7,rank:6,votes:null}] },
+ { id:"suehiro", name:"すゑひろがりず", color:"#521c9b",
+   history:{2016:4,2017:3,2018:4,2019:6,2020:4,2021:4,2022:3,2023:4,2024:3,2025:3},
+   finals:[{year:2019,total:637,judges:7,rank:8,votes:null}] },
+ { id:"shimofuri", name:"霜降り明星", color:"#b18518",
+   history:{2015:3,2016:5,2017:5,2018:8},
+   finals:[{year:2018,total:662,judges:7,rank:1,votes:4}] },
+ { id:"jarujaru", name:"ジャルジャル", color:"#2ab1b2",
+   history:{2015:7,2016:5,2017:6,2018:7},
+   finals:[{year:2015,total:834,judges:9,rank:3,votes:1},{year:2017,total:636,judges:7,rank:6,votes:null},{year:2018,total:648,judges:7,rank:3,votes:0}] },
+ { id:"miki", name:"ミキ", color:"#c82598",
+   history:{2015:4,2016:5,2017:7,2018:6,2019:5,2020:4,2021:4,2022:5,2023:4,2024:4,2025:5},
+   finals:[{year:2017,total:650,judges:7,rank:3,votes:0},{year:2018,total:638,judges:7,rank:4,votes:null}] },
+ { id:"gallop", name:"ギャロップ", color:"#50a216",
+   history:{2015:3,2016:4,2017:4,2018:6},
+   finals:[{year:2018,total:614,judges:7,rank:8,votes:null}] },
+ { id:"torosalmon", name:"とろサーモン", color:"#2635a3",
+   history:{2015:5,2016:5,2017:8},
+   finals:[{year:2017,total:645,judges:7,rank:1,votes:4}] },
+ { id:"yunibaasu", name:"ゆにばーす", color:"#b93c22",
+   history:{2015:3,2016:5,2017:6,2018:6,2019:4,2020:5,2021:6,2022:4,2023:4,2024:4,2025:4},
+   finals:[{year:2017,total:626,judges:7,rank:8,votes:null},{year:2018,total:594,judges:7,rank:10,votes:null},{year:2021,total:638,judges:7,rank:6,votes:null}] },
+ { id:"kaminari", name:"カミナリ", color:"#1cd170",
+   history:{2015:2,2016:6,2017:6,2019:5,2021:4,2022:4},
+   finals:[{year:2016,total:441,judges:5,rank:7,votes:null},{year:2017,total:618,judges:7,rank:9,votes:null}] },
+ { id:"ginshari", name:"銀シャリ", color:"#792395",
+   history:{2015:7,2016:8},
+   finals:[{year:2015,total:818,judges:9,rank:2,votes:2},{year:2016,total:470,judges:5,rank:1,votes:3}] },
+ { id:"saraba", name:"さらば青春の光", color:"#a4aa1f",
+   history:{2015:5,2016:6,2017:5,2018:5},
+   finals:[{year:2016,total:448,judges:5,rank:4,votes:null}] },
+ { id:"slimclub", name:"スリムクラブ", color:"#1a89c1",
+   history:{2015:4,2016:6,2017:4,2018:4,2019:4,2020:4},
+   finals:[{year:2016,total:441,judges:5,rank:8,votes:null}] },
+ { id:"aiseki", name:"相席スタート", color:"#c02d63",
+   history:{2015:5,2016:6,2017:5,2018:4},
+   finals:[{year:2016,total:436,judges:5,rank:9,votes:null}] },
+ { id:"trendy", name:"トレンディエンジェル", color:"#269b1c",
+   history:{2015:8},
+   finals:[{year:2015,total:825,judges:9,rank:1,votes:6}] },
+ { id:"timemachine3", name:"タイムマシーン3号", color:"#3918b1",
+   history:{2015:6},
+   finals:[{year:2015,total:816,judges:9,rank:4,votes:null}] },
+ { id:"supermaradona", name:"スーパーマラドーナ", color:"#b26e2a",
+   history:{2015:6,2016:7,2017:6,2018:6},
+   finals:[{year:2015,total:813,judges:9,rank:5,votes:null},{year:2016,total:459,judges:5,rank:3,votes:1},{year:2017,total:640,judges:7,rank:4,votes:null},{year:2018,total:617,judges:7,rank:7,votes:null}] },
+ { id:"maple", name:"メイプル超合金", color:"#25c8a7",
+   history:{2015:6,2016:5},
+   finals:[{year:2015,total:796,judges:9,rank:7,votes:null}] },
+ { id:"bakayo", name:"馬鹿よ貴方は", color:"#a21695",
+   history:{2015:6,2016:5,2017:4,2018:3,2019:4,2020:2,2021:3,2022:1,2023:3},
+   finals:[{year:2015,total:791,judges:9,rank:8,votes:null}] }
+];
+const NEWCOMBI = [
+ { id:"nakagawake", name:"中川家", color:"#8d6e63", history:{2001:8}, finals:[{year:2001,rank:1}] },
+ { id:"harigane", name:"ハリガネロック", color:"#00897b", history:{2001:7,2002:6,2003:5,2005:5}, finals:[{year:2001,rank:2},{year:2002,rank:5}] },
+ { id:"amezari", name:"アメリカザリガニ", color:"#d81b60", history:{2001:6,2002:6,2003:6}, finals:[{year:2001,rank:3},{year:2002,rank:9},{year:2003,rank:7}] },
+ { id:"masuda", name:"ますだおかだ", color:"#3949ab", history:{2001:6,2002:8}, finals:[{year:2001,rank:4},{year:2002,rank:1}] },
+ { id:"kirin", name:"麒麟", color:"#7cb342", history:{2001:6,2002:5,2003:6,2004:7,2005:7,2006:7,2007:5,2008:5}, finals:[{year:2001,rank:5},{year:2003,rank:8},{year:2004,rank:3},{year:2005,rank:3},{year:2006,rank:3}] },
+ { id:"football", name:"フットボールアワー", color:"#fb8c00", history:{2001:6,2002:7,2003:8,2006:7}, finals:[{year:2001,rank:6},{year:2002,rank:2},{year:2003,rank:1},{year:2006,rank:2}] },
+ { id:"kingkong", name:"キングコング", color:"#5e35b1", history:{2001:6,2002:5,2003:5,2004:5,2007:7,2008:6,2009:5}, finals:[{year:2001,rank:7},{year:2007,rank:3},{year:2008,rank:8}] },
+ { id:"tutorial", name:"チュートリアル", color:"#00acc1", history:{2001:6,2002:5,2003:5,2004:5,2005:6,2006:8}, finals:[{year:2001,rank:8},{year:2005,rank:5},{year:2006,rank:1}] },
+ { id:"dondoko", name:"DonDokoDon", color:"#a1887f", history:{2001:6}, finals:[{year:2001,rank:9}] },
+ { id:"ogiyahagi", name:"おぎやはぎ", color:"#43a047", history:{2001:6,2002:6,2003:5}, finals:[{year:2001,rank:10},{year:2002,rank:4}] },
+ { id:"waraii", name:"笑い飯", color:"#e53935", history:{2001:2,2002:7,2003:7,2004:6,2005:7,2006:6,2007:6,2008:6,2009:7,2010:8}, finals:[{year:2002,rank:3},{year:2003,rank:2},{year:2004,rank:5},{year:2005,rank:2},{year:2006,rank:4},{year:2007,rank:5},{year:2008,rank:4},{year:2009,rank:2},{year:2010,rank:1}] },
+ { id:"tetsutomo", name:"テツandトモ", color:"#8e24aa", history:{2002:6}, finals:[{year:2002,rank:6}] },
+ { id:"speedwagon", name:"スピードワゴン", color:"#039be5", history:{2002:6,2003:6,2004:5,2007:5,2008:5}, finals:[{year:2002,rank:7},{year:2003,rank:6}] },
+ { id:"dainoji", name:"ダイノジ", color:"#7a4a21", history:{2001:5,2002:6,2003:5,2004:5}, finals:[{year:2002,rank:8}] },
+ { id:"untouchable", name:"アンタッチャブル", color:"#00838f", history:{2001:5,2002:3,2003:7,2004:8}, finals:[{year:2003,rank:3},{year:2004,rank:1}] },
+ { id:"nichokenju", name:"2丁拳銃", color:"#6d4c41", history:{2001:5,2002:5,2003:6}, finals:[{year:2003,rank:4}] },
+ { id:"realkids", name:"りあるキッズ", color:"#c0ca33", history:{2001:5,2002:5,2003:6,2004:5,2005:5,2006:5}, finals:[{year:2003,rank:5}] },
+ { id:"chidori", name:"千鳥", color:"#303f9f", history:{2001:2,2002:5,2003:6,2004:6,2005:6,2006:5,2007:6,2008:5,2009:5,2010:5}, finals:[{year:2003,rank:9},{year:2004,rank:9},{year:2005,rank:6},{year:2007,rank:8}] },
+ { id:"nankai", name:"南海キャンディーズ", color:"#ec407a", history:{2003:5,2004:7,2005:6,2008:5,2009:6,2016:5,2017:5}, finals:[{year:2004,rank:2},{year:2005,rank:9},{year:2009,rank:8}] },
+ { id:"takaToshi", name:"タカアンドトシ", color:"#26a69a", history:{2001:5,2002:5,2003:5,2004:6}, finals:[{year:2004,rank:4}] },
+ { id:"poison", name:"POISON GIRL BAND", color:"#ab47bc", history:{2002:3,2003:5,2004:6,2005:5,2006:6,2007:6,2008:5,2009:5,2010:5,2015:5}, finals:[{year:2004,rank:6},{year:2006,rank:9},{year:2007,rank:9}] },
+ { id:"total", name:"トータルテンボス", color:"#ffa000", history:{2001:2,2002:5,2003:5,2004:6,2005:5,2006:6,2007:7}, finals:[{year:2004,rank:7},{year:2006,rank:5},{year:2007,rank:2}] },
+ { id:"tokyodynamite", name:"東京ダイナマイト", color:"#5c6bc0", history:{2002:2,2003:3,2004:6,2005:5,2006:5,2007:5,2008:5,2009:6,2010:5,2015:5,2016:5}, finals:[{year:2004,rank:8},{year:2009,rank:6}] },
+ { id:"blackmayo", name:"ブラックマヨネーズ", color:"#424242", history:{2001:5,2002:5,2003:5,2004:5,2005:8}, finals:[{year:2005,rank:1}] },
+ { id:"shinagawa", name:"品川庄司", color:"#66bb6a", history:{2002:5,2004:5,2005:6}, finals:[{year:2005,rank:4}] },
+ { id:"asian", name:"アジアン", color:"#ef6c00", history:{2002:5,2003:3,2004:5,2005:6,2006:5,2007:5,2008:5,2009:5,2010:3}, finals:[{year:2005,rank:8}] },
+ { id:"license", name:"ライセンス", color:"#29b6f6", history:{2001:3,2002:5,2003:5,2004:5,2005:5,2006:6}, finals:[{year:2006,rank:6}] },
+ { id:"plan9", name:"ザ・プラン9", color:"#9ccc65", history:{2003:5,2004:5,2005:5,2006:6,2007:5,2015:4,2016:4}, finals:[{year:2006,rank:7}] },
+ { id:"henho", name:"変ホ長調", color:"#ba68c8", history:{2005:5,2006:6,2007:3,2008:3,2009:3,2010:3,2015:2,2016:2,2017:2,2018:3,2019:4,2020:2}, finals:[{year:2006,rank:8}] },
+ { id:"sandwichman", name:"サンドウィッチマン", color:"#d4a017", history:{2002:1,2003:2,2004:2,2005:5,2006:5,2007:8}, finals:[{year:2007,rank:1}] },
+ { id:"harisenbon", name:"ハリセンボン", color:"#f06292", history:{2004:5,2005:3,2006:3,2007:6,2008:5,2009:6,2010:3}, finals:[{year:2007,rank:4},{year:2009,rank:9}] },
+ { id:"zabunguru", name:"ザブングル", color:"#4db6ac", history:{2004:5,2005:5,2006:5,2007:6,2008:3}, finals:[{year:2007,rank:6}] },
+ { id:"diane", name:"ダイアン", color:"#7986cb", history:{2001:3,2002:5,2003:5,2004:5,2005:5,2006:5,2007:6,2008:6,2009:5,2015:5}, finals:[{year:2007,rank:7},{year:2008,rank:6}] },
+ { id:"nonstyle", name:"NON STYLE", color:"#aed581", history:{2001:3,2002:5,2003:3,2004:3,2005:5,2006:5,2007:5,2008:8,2009:7}, finals:[{year:2008,rank:1},{year:2009,rank:3}] },
+ { id:"audrey", name:"オードリー", color:"#ffb300", history:{2001:1,2002:2,2003:3,2004:2,2005:2,2006:2,2007:5,2008:7}, finals:[{year:2008,rank:2}] },
+ { id:"knights", name:"ナイツ", color:"#4e342e", history:{2001:2,2002:3,2003:3,2004:3,2005:3,2006:3,2007:5,2008:7,2009:6,2010:6,2015:5}, finals:[{year:2008,rank:3},{year:2009,rank:4},{year:2010,rank:6}] },
+ { id:"uji", name:"U字工事", color:"#0097a7", history:{2002:2,2003:5,2004:5,2005:5,2006:5,2007:5,2008:6,2009:5,2015:3}, finals:[{year:2008,rank:5}] },
+ { id:"monsterengine", name:"モンスターエンジン", color:"#7e57c2", history:{2007:5,2008:6,2009:6,2010:5,2015:5,2016:4,2017:4,2018:4,2019:4,2020:2,2021:4,2022:4}, finals:[{year:2008,rank:7},{year:2009,rank:7}] },
+ { id:"thepunch", name:"ザ・パンチ", color:"#26c6da", history:{2001:2,2002:2,2003:2,2004:1,2005:5,2006:5,2007:5,2008:6}, finals:[{year:2008,rank:9}] },
+ { id:"punkbooboo", name:"パンクブーブー", color:"#c62828", history:{2001:3,2002:2,2003:5,2004:5,2005:3,2006:5,2007:5,2008:5,2009:8,2010:7}, finals:[{year:2009,rank:1},{year:2010,rank:3}] },
+ { id:"piece", name:"ピース", color:"#9e9d24", history:{2004:5,2005:3,2006:3,2007:5,2008:5,2009:3,2010:6}, finals:[{year:2010,rank:4}] },
+ { id:"kanaria", name:"カナリア", color:"#ad1457", history:{2003:3,2004:5,2005:5,2006:5,2007:5,2008:5,2009:5,2010:6,2015:3,2016:4,2017:2}, finals:[{year:2010,rank:9}] }
+];
+COMBI.push(...NEWCOMBI);
+const PRE = {
+ trendy:{2005:2,2006:2,2007:3,2008:3,2009:5,2010:4},
+ ginshari:{2005:2,2006:5,2007:3,2008:5,2009:5,2010:6},
+ torosalmon:{2003:5,2004:5,2005:5,2006:5,2007:5,2008:5,2009:5,2010:4},
+ milkboy:{2006:2,2007:1,2009:3,2010:4},
+ magical:{2007:3,2008:5,2009:3,2010:5},
+ wagyu:{2006:1,2007:2,2008:2,2009:5,2010:4},
+ supermaradona:{2003:2,2004:5,2005:5,2006:5,2007:3,2008:5,2009:5,2010:4},
+ timemachine3:{2003:5,2004:5,2005:6,2006:5,2007:5,2008:5,2009:5,2010:5},
+ jarujaru:{2002:1,2003:3,2004:3,2005:3,2006:5,2007:5,2008:5,2009:5,2010:6},
+ slimclub:{2005:1,2007:3,2008:2,2009:5,2010:7},
+ haraichi:{2005:3,2006:1,2007:1,2008:5,2009:6,2010:6},
+ kamaitachi:{2004:2,2005:5,2006:5,2007:5,2008:5,2009:5,2010:4},
+ mitorizu:{2006:1,2007:1,2008:1,2009:5,2010:3},
+ gallop:{2004:1,2005:2,2006:5,2007:5,2008:5,2009:5,2010:4},
+ saraba:{2008:2,2009:5,2010:3},
+ tombrown:{2008:2,2009:1,2010:2},
+ indians:{2009:1,2010:2},
+ newyork:{2010:1},
+ pekopa:{2008:1,2009:2,2010:3},
+ bakayo:{2009:2,2010:2},
+ daitaku:{2009:2,2010:3},
+ mayurika:{2010:2},
+ danbira:{2010:1},
+ westland:{2010:2},
+ ranjatai:{2007:1,2009:1,2010:2},
+ mogu:{2009:2,2010:1},
+ longcoat:{2010:1},
+ dansei:{2010:1},
+ kaname:{2008:1,2009:1,2010:1}
+};
+for (const [id, h] of Object.entries(PRE)) {
+  const c = COMBI.find(c => c.id === id);
+  if (c) for (const y in h) if (c.history[y] === undefined) c.history[y] = h[y];
+}
+
+/* [年, 優勝コンビ, 決勝進出組（順位順）] */
+const GROUPS = [
+ [2025,"たくろう",["takuro","donde","evers","shinku","yarens","gokai","kaname","yoneda","mama","mezon"]],
+ [2024,"令和ロマン",["reiwa","batteryz","shinku","evers","yarens","tombrown","daitaku","mayurika","jockrock","mama"]],
+ [2023,"令和ロマン",["reiwa","yarens","sayaka","mayurika","shinku","kabeposter","mogu","danbira","shishigashira","kurage"]],
+ [2022,"ウエストランド",["westland","sayaka","longcoat","dansei","shinku","yoneda","oswald","kabeposter","kyu","diamond"]],
+ [2021,"錦鯉",["nishikigoi","oswald","indians","longcoat","momo","yunibaasu","shinku","mogu","haraichi","ranjatai"]],
+ [2020,"マヂカルラブリー",["magical","oideyasukoga","mitorizu","nishikigoi","newyork","oswald","indians","akina","westland","hoteison"]],
+ [2019,"ミルクボーイ",["milkboy","kamaitachi","pekopa","wagyu","mitorizu","karashi","oswald","suehiro","indians","newyork"]],
+ [2018,"霜降り明星",["shimofuri","wagyu","jarujaru","miki","kamaitachi","tombrown","supermaradona","gallop","mitorizu","yunibaasu"]],
+ [2017,"とろサーモン",["torosalmon","wagyu","miki","supermaradona","kamaitachi","jarujaru","sayaka","yunibaasu","kaminari","magical"]],
+ [2016,"銀シャリ",["ginshari","wagyu","supermaradona","saraba","akina","haraichi","kaminari","slimclub","aiseki"]],
+ [2015,"トレンディエンジェル",["trendy","ginshari","jarujaru","timemachine3","supermaradona","wagyu","maple","bakayo","haraichi"]],
+ [2010,"笑い飯",["waraii","slimclub","punkbooboo","piece","ginshari","knights","haraichi","jarujaru","kanaria"]],
+ [2009,"パンクブーブー",["punkbooboo","waraii","nonstyle","knights","haraichi","tokyodynamite","monsterengine","nankai","harisenbon"]],
+ [2008,"NON STYLE",["nonstyle","audrey","knights","waraii","uji","diane","monsterengine","kingkong","thepunch"]],
+ [2007,"サンドウィッチマン",["sandwichman","total","kingkong","harisenbon","waraii","zabunguru","diane","chidori","poison"]],
+ [2006,"チュートリアル",["tutorial","football","kirin","waraii","total","license","plan9","henho","poison"]],
+ [2005,"ブラックマヨネーズ",["blackmayo","waraii","kirin","shinagawa","tutorial","chidori","timemachine3","asian","nankai"]],
+ [2004,"アンタッチャブル",["untouchable","nankai","kirin","takaToshi","waraii","poison","total","tokyodynamite","chidori"]],
+ [2003,"フットボールアワー",["football","waraii","untouchable","nichokenju","realkids","speedwagon","amezari","kirin","chidori"]],
+ [2002,"ますだおかだ",["masuda","football","waraii","ogiyahagi","harigane","tetsutomo","speedwagon","dainoji","amezari"]],
+ [2001,"中川家",["nakagawake","harigane","amezari","masuda","kirin","football","kingkong","tutorial","dondoko","ogiyahagi"]]
+];
+const YEARS_MODERN = [2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025];
+const YEARS_ALL = [2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,...YEARS_MODERN];
+let YEARS = [...YEARS_MODERN], extended = false;
+const DEFAULTS = ["takuro","reiwa","shinku","evers"];
+let selected = Object.fromEntries(DEFAULTS.map(id => [id, true]));
+let focusId = DEFAULTS[0];
+const chartEl = document.getElementById("chart");
+const byId = id => COMBI.find(c => c.id === id);
+
+/* グラフ寸法：2001〜表示でも縦の長さと文字サイズが変わらないよう全体を同じ比率で拡大 */
+const BASE_W = 980, BASE_H = 520;
+let H, ML, MR, MT, MB, plotH;
+const curW = () => extended ? 1440 : BASE_W;
+const S = () => curW() / BASE_W;
+const plotW = () => curW() - ML - MR;
+function syncDims(){ const s = S(); H = BASE_H*s; ML = 96*s; MR = 14*s; MT = 24*s; MB = 44*s; plotH = H - MT - MB; }
+const X = yr => ML + (YEARS.indexOf(yr) + .5) * (plotW() / YEARS.length);
+const Y = lv => MT + (8 - lv) / 7 * plotH;
+
+/* 年ごとの見出し＋チップを生成（2010年以前の組も常時表示） */
+const groupsEl = document.getElementById("groups");
+for (const [yr, win, ids] of GROUPS) {
+  const lab = document.createElement("div");
+  lab.className = "group-label";
+  lab.innerHTML = yr + ' 決勝 <span class="win">優勝：' + win + "</span>";
+  const box = document.createElement("div");
+  box.className = "chips"; box.setAttribute("role","group"); box.setAttribute("aria-label", yr + "年決勝 コンビの選択");
+  for (const id of ids) {
+    const c = byId(id); if (!c) continue;
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.dataset.id = c.id;
+    b.style.setProperty("--c", c.color);
+    b.setAttribute("aria-pressed", selected[c.id] ? "true" : "false");
+    b.innerHTML = '<span class="dot"></span>' + c.name;
+    b.addEventListener("click", () => {
+      const on = !selected[c.id];
+      if (on) selected[c.id] = true; else delete selected[c.id];
+      if (on) focusId = c.id;
+      else if (focusId === c.id) { const n = COMBI.find(k => selected[k.id]); focusId = n ? n.id : null; }
+      syncChips(); render();
+    });
+    box.appendChild(b);
+  }
+  groupsEl.append(lab, box);
+}
+function syncChips(){ document.querySelectorAll(".chip").forEach(n => n.setAttribute("aria-pressed", selected[n.dataset.id] ? "true" : "false")); }
+
+const btnModern = document.getElementById("btnModern"), btnAll = document.getElementById("btnAll");
+function setRange(all){
+  extended = all; YEARS = [...(all ? YEARS_ALL : YEARS_MODERN)];
+  btnModern.setAttribute("aria-pressed", String(!all));
+  btnAll.setAttribute("aria-pressed", String(all));
+  render();
+}
+btnModern.addEventListener("click", () => setRange(false));
+btnAll.addEventListener("click", () => setRange(true));
+document.getElementById("btnReset").addEventListener("click", () => { selected = {}; focusId = null; syncChips(); render(); });
+
+function render(){
+  syncDims();
+  const s = S(), W = curW(), PW = plotW(), stepH = plotH / 7, colW = PW / YEARS.length;
+  const svg = ['<svg viewBox="0 0 ' + W + " " + H + '" width="100%" role="presentation" aria-hidden="true">'];
+  /* 背景の帯はグリッド線にぴったり合わせ、線からはみ出さない */
+  const bx1 = X(YEARS[0]), bx2 = X(YEARS[YEARS.length-1]);
+  svg.push('<rect x="'+bx1+'" y="'+Y(6)+'" width="'+(bx2-bx1)+'" height="'+(Y(5)-Y(6))+'" fill="var(--gold-bg)"/>');
+  svg.push('<rect x="'+bx1+'" y="'+Y(8)+'" width="'+(bx2-bx1)+'" height="'+(Y(6)-Y(8))+'" fill="var(--final-bg)"/>');
+  /* グリッドは点の座標に線を通す。存在しなかったラウンド（2001〜2009準々決勝／2020年3回戦）は
+     その範囲の十字線を抜き、隣のグリッド線を外周とする「口」にする */
+  const noRound = (yr, lv) => (lv === 4 && yr >= 2001 && yr <= 2009) || (lv === 3 && yr === 2020);
+  const grid = [];
+  const hSeg = (x1,x2,y) => grid.push('<line x1="'+x1+'" y1="'+y+'" x2="'+x2+'" y2="'+y+'"/>');
+  const vSeg = (x,y1,y2) => grid.push('<line x1="'+x+'" y1="'+y1+'" x2="'+x+'" y2="'+y2+'"/>');
+  const hOmit = (cx, lv) => YEARS.some(yr => noRound(yr, lv) && cx > X(yr)-colW && cx < X(yr)+colW);
+  const vOmit = (yr, cy) => { for (let lv=1; lv<=8; lv++) if (noRound(yr, lv) && cy > Y(lv)-stepH && cy < Y(lv)+stepH) return true; return false; };
+  YEARS.forEach((yr, i) => {
+    const x1 = ML + i*colW, xc = X(yr), x2 = x1 + colW;
+    for (let lv=1; lv<=8; lv++) {
+      if (!hOmit((x1+xc)/2, lv)) hSeg(x1, xc, Y(lv));
+      if (!hOmit((xc+x2)/2, lv)) hSeg(xc, x2, Y(lv));
+    }
+  });
+  for (let lv=1; lv<=8; lv++) {
+    const top = lv === 8 ? MT : Y(lv) - stepH/2, bot = lv === 1 ? MT + plotH : Y(lv) + stepH/2, ym = Y(lv);
+    for (const yr of YEARS) {
+      if (top < ym && !vOmit(yr, (top+ym)/2)) vSeg(X(yr), top, ym);
+      if (ym < bot && !vOmit(yr, (ym+bot)/2)) vSeg(X(yr), ym, bot);
+    }
+  }
+  svg.push('<g stroke="var(--chart-grid)" stroke-width="'+(1.1*s)+'">' + grid.join("") + "</g>");
+  svg.push('<rect x="0" y="0" width="'+(ML-4*s)+'" height="'+H+'" fill="#fff"/>');
+  if (extended) {
+    const bx = (X(2010)+X(2015))/2, cy = MT + plotH/2;
+    svg.push('<line x1="'+bx+'" y1="'+MT+'" x2="'+bx+'" y2="'+(MT+plotH)+'" stroke="#b9b2a0" stroke-width="'+(1.4*s)+'" stroke-dasharray="'+(5*s)+" "+(4*s)+'"/>');
+    svg.push('<text transform="rotate(-90 '+bx+" "+cy+')" x="'+bx+'" y="'+(cy+4*s)+'" text-anchor="middle" font-size="'+(12*s)+'" font-weight="700" fill="#7a7260" style="paint-order:stroke;stroke:#fff;stroke-width:'+(3*s)+'px;stroke-linejoin:round">2011〜2014 休止</text>');
+  }
+  for (let lv=1; lv<=8; lv++) {
+    const bold = lv >= 6;
+    svg.push('<text x="'+(ML-10*s)+'" y="'+(Y(lv)+(bold?7:6.5)*s)+'" text-anchor="end" font-size="'+((bold?19:17.5)*s)+'" font-weight="'+(bold?900:600)+'" fill="'+(lv===8?"var(--gold)":lv>=6?"var(--red)":"var(--muted)")+'">'+LEVELS[lv]+"</text>");
+  }
+  for (const yr of YEARS) svg.push('<text x="'+X(yr)+'" y="'+(H-12*s)+'" text-anchor="middle" font-size="'+(15*s)+'" font-weight="900" fill="var(--muted)">'+yr+"</text>");
+  /* 折れ線（データのない年で切り、2010→2015は休止をまたいでつなぐ） */
+  const labels = [];
+  for (const c of COMBI) {
+    if (!selected[c.id]) continue;
+    const foc = c.id === focusId;
+    let seg = [];
+    const flush = () => {
+      if (seg.length > 1) svg.push('<path d="'+seg.map((p,i)=>(i?"L":"M")+p[0]+","+p[1]).join(" ")+'" fill="none" stroke="'+c.color+'" stroke-width="'+((foc?4:2.6)*s)+'" stroke-linejoin="round" stroke-linecap="round" opacity="'+(foc?1:.8)+'"/>');
+      seg = [];
+    };
+    for (const yr of YEARS) {
+      if (c.history[yr] === undefined) { flush(); continue; }
+      seg.push([X(yr), Y(c.history[yr])]);
+    }
+    flush();
+    let ly = null;
+    for (const yr of YEARS) {
+      if (c.history[yr] === undefined) continue;
+      ly = yr;
+      svg.push('<circle cx="'+X(yr)+'" cy="'+Y(c.history[yr])+'" r="'+((foc?7:5.5)*s)+'" fill="'+c.color+'" stroke="#fff" stroke-width="'+(2*s)+'"/>');
+      svg.push('<circle class="hit" data-cid="'+c.id+'" data-year="'+yr+'" cx="'+X(yr)+'" cy="'+Y(c.history[yr])+'" r="'+(20*s)+'" fill="transparent" style="cursor:pointer"/>');
+    }
+    if (ly !== null) labels.push({ name:c.name, color:c.color, foc, x:X(ly), y:Y(c.history[ly]) });
+  }
+  /* 名前ラベル：最上段は点の下へ、重なりは縦にずらし、左右端ではみ出す分だけ内側へ寄せる */
+  for (const it of labels) { it.ly = it.y - 16*s; if (it.ly < 18*s) it.ly = it.y + 29*s; }
+  labels.sort((a,b) => a.ly - b.ly || a.x - b.x);
+  for (let p=0; p<3; p++) for (let i=1; i<labels.length; i++) for (let j=0; j<i; j++)
+    if (Math.abs(labels[i].x-labels[j].x) < 110*s && Math.abs(labels[i].ly-labels[j].ly) < 17*s) labels[i].ly = labels[j].ly + 17*s;
+  for (const it of labels) {
+    const ly = Math.min(Math.max(it.ly, 14*s), MT + plotH - 2*s);
+    const fs = (it.foc ? 15.5 : 14.5) * s;
+    let est = 0; for (const ch of it.name) est += ch.charCodeAt(0) > 0xff ? fs : fs*.62;
+    const half = est/2 + 4*s;
+    const lx = Math.min(Math.max(it.x, half + 2*s), W - 2*s - half);
+    svg.push('<text x="'+lx+'" y="'+ly+'" text-anchor="middle" font-size="'+fs+'" font-weight="900" fill="'+it.color+'" style="paint-order:stroke;stroke:#fff;stroke-width:'+(4*s)+'px;stroke-linejoin:round">'+it.name+"</text>");
+  }
+  svg.push("</svg>");
+  chartEl.innerHTML = svg.join("");
+  chartEl.querySelectorAll(".hit").forEach(h => h.addEventListener("click", () => {
+    const c = byId(h.dataset.cid);
+    if (c && c.history[h.dataset.year] !== undefined) { focusId = c.id; render(); }
+  }));
+}
+render();
+</script>
+</body>
+</html>
